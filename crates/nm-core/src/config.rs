@@ -1,6 +1,12 @@
 use crate::speedtest::SpeedTestConfig;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Relative path to the setup template shipped with the project (not used at runtime).
+pub const SETUP_TEMPLATE_RELATIVE: &str = "config/example.toml";
+
+/// Runtime config location under the user's home directory (XDG config).
+pub const CONFIG_RELATIVE: &str = ".config/network-monitor/config.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -157,13 +163,33 @@ impl Default for FcmConfig {
     }
 }
 
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
 pub fn expand_path(path: &str) -> String {
+    expand_path_buf(path).to_string_lossy().into_owned()
+}
+
+pub fn expand_path_buf(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return format!("{home}/{rest}");
+        if let Some(home) = home_dir() {
+            return home.join(rest);
         }
     }
-    path.to_string()
+    PathBuf::from(path)
+}
+
+/// Path to the runtime application config in the user's home directory.
+pub fn default_config_path() -> PathBuf {
+    home_dir()
+        .map(|home| home.join(CONFIG_RELATIVE))
+        .unwrap_or_else(|| PathBuf::from(CONFIG_RELATIVE))
+}
+
+/// Default path to the setup template in the project/build tree.
+pub fn default_setup_template_path() -> PathBuf {
+    PathBuf::from(SETUP_TEMPLATE_RELATIVE)
 }
 
 pub fn default_agent_name_from_hostname() -> String {

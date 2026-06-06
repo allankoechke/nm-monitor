@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/nm-agent run --config /etc/network-monitor/config.toml
+# User service: config lives in the home directory after `nm-agent setup`
+ExecStart=/usr/local/bin/nm-agent run
 Restart=on-failure
 RestartSec=10
 AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
@@ -13,4 +14,4 @@ AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
 # setcap cap_net_raw,cap_net_admin+ep /usr/local/bin/nm-agent
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

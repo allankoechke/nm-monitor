@@ -2,12 +2,27 @@ use nm_core::config::{default_agent_name_from_hostname, load_config, save_config
 use std::io::{self, Write};
 use std::path::Path;
 
-pub async fn run_setup(config_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let mut config = if config_path.exists() {
-        load_config(config_path)?
+pub async fn run_setup(
+    template_path: &Path,
+    output_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut config = if template_path.exists() {
+        println!("Using setup template: {}", template_path.display());
+        load_config(template_path)?
     } else {
+        println!(
+            "Template not found at {} — using built-in defaults",
+            template_path.display()
+        );
         nm_core::AppConfig::default()
     };
+
+    if output_path.exists() {
+        println!(
+            "Warning: {} already exists and will be overwritten",
+            output_path.display()
+        );
+    }
 
     let default_name = config
         .agent
@@ -29,8 +44,9 @@ pub async fn run_setup(config_path: &Path) -> Result<(), Box<dyn std::error::Err
         name.to_string()
     });
 
-    save_config(config_path, &config)?;
-    println!("Saved config to {}", config_path.display());
+    save_config(output_path, &config)?;
+    println!("Saved runtime config to {}", output_path.display());
     println!("Agent name: {}", config.agent.name.as_ref().unwrap());
+    println!("Run the agent with: nm-agent run");
     Ok(())
 }

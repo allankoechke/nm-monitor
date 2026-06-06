@@ -1,7 +1,10 @@
 use chrono::Utc;
 use nm_api::{build_router, ApiState};
 use nm_classify::{ClassificationInput, DeviceClassifier};
-use nm_core::config::{default_agent_name_from_hostname, expand_path, load_config, save_config, AppConfig};
+use nm_core::config::{
+    default_agent_name_from_hostname, default_config_path, expand_path, load_config, save_config,
+    AppConfig,
+};
 use nm_core::event::EventKind;
 use nm_core::notify::{
     device_joined_body, device_left_body, network_down_body, network_down_title,
@@ -19,14 +22,19 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub async fn run_daemon(config_path: &Path, scan_once: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut config = if config_path.exists() {
         load_config(config_path)?
     } else {
-        warn!("config not found, using defaults");
-        AppConfig::default()
+        let expected = default_config_path();
+        return Err(format!(
+            "config not found at {}. Run `nm-agent setup` first (writes to {}).",
+            config_path.display(),
+            expected.display()
+        )
+        .into());
     };
 
     let agent_name = resolve_agent_name(&mut config, config_path)?;

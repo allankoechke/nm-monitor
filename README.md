@@ -24,20 +24,36 @@ sudo dnf install libpcap-devel openssl-devel
 sudo apt install libpcap-dev libssl-dev
 ```
 
+## Configuration
+
+| File | Purpose |
+|---|---|
+| `config/example.toml` | Setup template in the project tree — used only by `nm-agent setup` |
+| `~/.config/network-monitor/config.toml` | Runtime config — read by `nm-agent run` |
+
+Run `nm-agent setup` once to copy the template into your home directory and set the agent name. Edit `~/.config/network-monitor/config.toml` for ongoing changes.
+
 ## Quick start
 
 ```bash
 # Build
 cargo build --release
 
-# First-run setup (agent name)
-cargo run -p nm-agent -- setup --config config/example.toml
+# First-run setup (template → ~/.config/network-monitor/config.toml)
+cargo run -p nm-agent -- setup
 
 # Run daemon (requires elevated privileges for ARP/pcap)
-sudo -E cargo run -p nm-agent -- run --config config/example.toml
+sudo -E cargo run -p nm-agent -- run
 
 # One-shot scan
-sudo -E cargo run -p nm-agent -- --scan-once --config config/example.toml
+sudo -E cargo run -p nm-agent -- --scan-once
+```
+
+Override paths if needed:
+
+```bash
+cargo run -p nm-agent -- setup --template config/example.toml
+cargo run -p nm-agent -- run --config ~/.config/network-monitor/config.toml
 ```
 
 ## Privileges
@@ -66,9 +82,7 @@ Install the [ntfy app](https://ntfy.sh) and subscribe to your configured topic (
 | `GET /speedtests` | Speed test time series |
 | `POST /speedtests/run` | On-demand speed test |
 
-## Configuration
-
-See [`config/example.toml`](config/example.toml).
+See [`config/example.toml`](config/example.toml) for the setup template and `~/.config/network-monitor/config.toml` for your live settings.
 
 ## Workspace crates
 

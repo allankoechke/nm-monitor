@@ -1,5 +1,9 @@
+# Setup template — copied to ~/.config/network-monitor/config.toml by `nm-agent setup`.
+# The agent reads only the home-directory config at runtime, not this file.
+
 [agent]
-name = "Fedora WStation"
+# Overridden interactively during setup; change later via config or PUT /agent
+name = "Home Network Agent"
 
 [network]
 interface = "auto"
