@@ -1,0 +1,26 @@
+[package]
+name = "nm-discovery"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+nm-core = { path = "../nm-core" }
+nm-classify = { path = "../nm-classify" }
+tokio = { workspace = true }
+pnet = { workspace = true }
+surge-ping = { workspace = true }
+ipnetwork = { workspace = true }
+pcap = { workspace = true }
+mdns-sd = { workspace = true }
+rtnetlink = { workspace = true }
+netlink-packet-route = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+mac_address = { workspace = true }
+etherparse = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }

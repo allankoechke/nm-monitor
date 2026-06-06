@@ -1,0 +1,22 @@
+[package]
+name = "nm-api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+nm-core = { path = "../nm-core" }
+nm-store = { path = "../nm-store" }
+nm-discovery = { path = "../nm-discovery" }
+nm-speedtest = { path = "../nm-speedtest" }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }

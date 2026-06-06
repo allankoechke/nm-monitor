@@ -1,0 +1,25 @@
+[package]
+name = "nm-agent"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "nm-agent"
+path = "src/main.rs"
+
+[dependencies]
+nm-core = { path = "../nm-core" }
+nm-store = { path = "../nm-store" }
+nm-discovery = { path = "../nm-discovery" }
+nm-classify = { path = "../nm-classify" }
+nm-notify = { path = "../nm-notify" }
+nm-speedtest = { path = "../nm-speedtest" }
+nm-api = { path = "../nm-api" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }

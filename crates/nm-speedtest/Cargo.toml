@@ -1,0 +1,16 @@
+[package]
+name = "nm-speedtest"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+nm-core = { path = "../nm-core" }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+futures = { workspace = true }
+bytes = { workspace = true }

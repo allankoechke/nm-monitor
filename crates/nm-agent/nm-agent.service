@@ -1,0 +1,16 @@
+[Unit]
+Description=Network Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/nm-agent run --config /etc/network-monitor/config.toml
+Restart=on-failure
+RestartSec=10
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+# Alternatively grant capabilities to the binary:
+# setcap cap_net_raw,cap_net_admin+ep /usr/local/bin/nm-agent
+
+[Install]
+WantedBy=multi-user.target

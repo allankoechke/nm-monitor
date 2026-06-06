@@ -1,0 +1,9 @@
+[package]
+name = "nm-classify"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+nm-core = { path = "../nm-core" }
+serde = { workspace = true }
+mac_address = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name = "nm-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+mac_address = { workspace = true }
+ipnetwork = { workspace = true }
+toml = { workspace = true }
+hostname = { workspace = true }
