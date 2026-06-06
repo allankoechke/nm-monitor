@@ -4,7 +4,7 @@ mod setup;
 use clap::{Parser, Subcommand};
 use daemon::run_daemon;
 use nm_core::{default_config_path, default_setup_template_path};
-use setup::run_setup;
+use setup::{ensure_configured, run_setup};
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
@@ -43,6 +43,23 @@ fn resolve_runtime_config(cli: &Cli) -> PathBuf {
         .unwrap_or_else(default_config_path)
 }
 
+fn resolve_setup_template(cli: &Cli) -> PathBuf {
+    if cli.template.exists() {
+        cli.template.clone()
+    } else {
+        default_setup_template_path()
+    }
+}
+
+async fn run_agent(
+    template: &PathBuf,
+    config: &PathBuf,
+    scan_once: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_configured(template, config).await?;
+    run_daemon(config, scan_once).await
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -51,18 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
     let runtime_config = resolve_runtime_config(&cli);
-    let setup_template = if cli.template.exists() {
-        cli.template.clone()
-    } else {
-        default_setup_template_path()
-    };
+    let setup_template = resolve_setup_template(&cli);
 
     match cli.command {
-        Some(Commands::Setup) => run_setup(&setup_template, &runtime_config).await?,
-        Some(Commands::Run) => run_daemon(&runtime_config, cli.scan_once).await?,
-        None if cli.daemon => run_daemon(&runtime_config, cli.scan_once).await?,
-        None if cli.scan_once => run_daemon(&runtime_config, true).await?,
-        None => run_daemon(&runtime_config, false).await?,
+        Some(Commands::Setup) => run_setup(&setup_template, &runtime_config, false).await?,
+        Some(Commands::Run) => run_agent(&setup_template, &runtime_config, cli.scan_once).await?,
+        None if cli.daemon => run_agent(&setup_template, &runtime_config, cli.scan_once).await?,
+        None if cli.scan_once => run_agent(&setup_template, &runtime_config, true).await?,
+        None => run_agent(&setup_template, &runtime_config, false).await?,
     }
     Ok(())
 }

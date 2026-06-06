@@ -39,11 +39,11 @@ Run `nm-agent setup` once to copy the template into your home directory and set 
 # Build
 cargo build --release
 
-# First-run setup (template → ~/.config/network-monitor/config.toml)
-cargo run -p nm-agent -- setup
-
-# Run daemon (requires elevated privileges for ARP/pcap)
+# First run: setup runs automatically if ~/.config/network-monitor/config.toml is missing
 sudo -E cargo run -p nm-agent -- run
+
+# Or run setup explicitly (optional)
+cargo run -p nm-agent -- setup
 
 # One-shot scan
 sudo -E cargo run -p nm-agent -- --scan-once
