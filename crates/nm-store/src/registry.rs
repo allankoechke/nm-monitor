@@ -216,7 +216,8 @@ impl DeviceRegistry {
             EventKind::DeviceReturned => format!("{} returned", device.mac),
             _ => device.mac.to_string(),
         };
-        self.record_event(kind, network_name, Some(device), message, None)
+        let _ = self.record_event(kind, network_name, Some(device), message, None)?;
+        Ok(())
     }
 
     pub fn record_event(

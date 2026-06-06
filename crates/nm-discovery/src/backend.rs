@@ -2,7 +2,6 @@ use crate::arp::arp_sweep;
 use crate::interface::{detect_network, NetworkInfo};
 use crate::ping::ping_host;
 use async_trait::async_trait;
-use mac_address::MacAddress;
 use nm_core::device::DeviceSnapshot;
 use nm_classify::oui::lookup_vendor;
 use std::net::IpAddr;

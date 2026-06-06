@@ -1,4 +1,4 @@
-use etherparse::ArpPacket;
+use etherparse::{ArpOperation, ArpPacket};
 use mac_address::MacAddress;
 use nm_core::device::DeviceSnapshot;
 use nm_classify::oui::lookup_vendor;
@@ -76,21 +76,29 @@ impl PassiveCapture {
 fn parse_packet(data: &[u8]) -> Option<PassiveObservation> {
     if data.len() >= 14 {
         if let Ok(arp) = ArpPacket::from_slice(&data[14..]) {
-            if arp.operation == etherparse::ArpOperation::Request
-                || arp.operation == etherparse::ArpOperation::Reply
-            {
-                let mac = MacAddress::from_bytes(arp.sender_hw_addr).ok()?;
-                let ip = IpAddr::V4(Ipv4Addr::from(arp.sender_protocol_addr));
-                if !ip.is_unspecified() && !ip.is_broadcast() {
-                    return Some(PassiveObservation {
-                        snapshot: DeviceSnapshot {
-                            mac,
-                            ip: Some(ip),
-                            hostname: None,
-                            vendor: lookup_vendor(&mac),
-                        },
-                        dhcp_hostname: None,
-                    });
+            if arp.operation == ArpOperation::REQUEST || arp.operation == ArpOperation::REPLY {
+                let hw = arp.sender_hw_addr();
+                if hw.len() != 6 {
+                    return None;
+                }
+                let mac = MacAddress::new([hw[0], hw[1], hw[2], hw[3], hw[4], hw[5]]);
+                let proto = arp.sender_protocol_addr();
+                if proto.len() != 4 {
+                    return None;
+                }
+                let ip = IpAddr::V4(Ipv4Addr::new(proto[0], proto[1], proto[2], proto[3]));
+                if let IpAddr::V4(v4) = ip {
+                    if !v4.is_unspecified() && !v4.is_broadcast() {
+                        return Some(PassiveObservation {
+                            snapshot: DeviceSnapshot {
+                                mac,
+                                ip: Some(ip),
+                                hostname: None,
+                                vendor: lookup_vendor(&mac),
+                            },
+                            dhcp_hostname: None,
+                        });
+                    }
                 }
             }
         }
@@ -100,7 +108,6 @@ fn parse_packet(data: &[u8]) -> Option<PassiveObservation> {
 }
 
 fn parse_dhcp_hostname(data: &[u8]) -> Option<PassiveObservation> {
-    // Minimal DHCP option 12 (hostname) parser for UDP bootp packets
     if data.len() < 42 {
         return None;
     }
@@ -128,10 +135,9 @@ fn parse_dhcp_hostname(data: &[u8]) -> Option<PassiveObservation> {
         return None;
     }
     let chaddr = &data[bootp_start + 28..bootp_start + 34];
-    let mac = MacAddress::from_bytes([
+    let mac = MacAddress::new([
         chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5],
-    ])
-    .ok()?;
+    ]);
     let mut opt_start = bootp_start + 236;
     if opt_start + 4 > data.len() {
         return None;
@@ -174,5 +180,3 @@ fn parse_dhcp_hostname(data: &[u8]) -> Option<PassiveObservation> {
         dhcp_hostname: hostname,
     })
 }
-
-pub type PassiveCaptureHandle = Arc<PassiveCapture>;

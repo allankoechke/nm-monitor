@@ -1,5 +1,4 @@
 use dashmap::DashMap;
-use mac_address::MacAddress;
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use std::collections::HashSet;
 use std::time::Duration;
@@ -47,43 +46,37 @@ pub fn spawn_mdns_browse(registry: MdnsRegistry) -> tokio::task::JoinHandle<()> 
 
 fn run_mdns(registry: MdnsRegistry) -> Result<(), String> {
     let mdns = ServiceDaemon::new().map_err(|e| e.to_string())?;
-    let receiver = mdns.get_receiver().map_err(|e| e.to_string())?;
-    let mut browsed = Vec::new();
+    let mut receivers = Vec::new();
 
     for service_type in SERVICE_TYPES {
-        let st = format!("{service_type}");
-        if mdns.browse(&st).is_ok() {
-            browsed.push(st);
+        match mdns.browse(service_type) {
+            Ok(rx) => receivers.push(rx),
+            Err(e) => warn!(service_type, error = %e, "mDNS browse failed for service type"),
         }
     }
-    info!(count = browsed.len(), "mDNS browse started");
+    info!(count = receivers.len(), "mDNS browse started");
 
     loop {
-        match receiver.recv_timeout(Duration::from_secs(5)) {
-            Ok(event) => match event {
-                ServiceEvent::ServiceResolved(info) => {
-                    let host = info
-                        .get_hostname()
-                        .trim_end_matches('.')
-                        .to_string();
-                    let service = info.get_fullname().to_string();
-                    registry
-                        .inner
-                        .entry(host)
-                        .or_default()
-                        .insert(service);
-                }
-                ServiceEvent::ServiceFound(_, fullname) => {
-                    let _ = mdns.resolve(&fullname);
-                }
-                _ => {}
-            },
-            Err(_) => continue,
+        for rx in &receivers {
+            match rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(event) => match event {
+                    ServiceEvent::ServiceResolved(info) => {
+                        let host = info
+                            .get_hostname()
+                            .trim_end_matches('.')
+                            .to_string();
+                        let service = info.get_fullname().to_string();
+                        registry
+                            .inner
+                            .entry(host)
+                            .or_default()
+                            .insert(service);
+                    }
+                    ServiceEvent::ServiceFound(_, _) => {}
+                    _ => {}
+                },
+                Err(_) => continue,
+            }
         }
     }
-}
-
-#[allow(dead_code)]
-fn hostname_to_mac(_hostname: &str) -> Option<MacAddress> {
-    None
 }

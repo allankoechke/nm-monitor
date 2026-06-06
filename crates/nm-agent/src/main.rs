@@ -40,7 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Setup) => run_setup(&cli.config).await?,
-        Some(Commands::Run) | None if cli.daemon => run_daemon(&cli.config, cli.scan_once).await?,
+        Some(Commands::Run) => run_daemon(&cli.config, cli.scan_once).await?,
+        None if cli.daemon => run_daemon(&cli.config, cli.scan_once).await?,
         None if cli.scan_once => run_daemon(&cli.config, true).await?,
         None => run_daemon(&cli.config, false).await?,
     }

@@ -62,12 +62,7 @@ pub fn detect_network(interface: &str, gateway: &str) -> Result<NetworkInfo, Int
         gateway.parse().ok()
     };
 
-    let mac = iface.mac.map(|m| {
-        mac_address::MacAddress::from_bytes([
-            m.0, m.1, m.2, m.3, m.4, m.5,
-        ])
-        .unwrap_or(mac_address::MacAddress::nil())
-    });
+    let mac = iface.mac.map(|m| mac_address::MacAddress::new([m.0, m.1, m.2, m.3, m.4, m.5]));
 
     Ok(NetworkInfo {
         interface: iface.name.clone(),

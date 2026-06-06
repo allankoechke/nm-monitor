@@ -10,5 +10,6 @@ pub mod ping;
 pub use backend::{DiscoveryBackend, DiscoverySnapshot, LinuxDiscoveryBackend, PlatformBackend};
 pub use interface::{detect_network, NetworkInfo};
 pub use link_monitor::{LinkMonitor, LinkState};
+pub use mdns::{spawn_mdns_browse, MdnsRegistry};
 pub use network_context::NetworkContext;
-pub use passive::PassiveCapture;
+pub use passive::{PassiveCapture, PassiveObservation};

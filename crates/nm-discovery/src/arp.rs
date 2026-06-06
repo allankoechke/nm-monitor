@@ -1,13 +1,12 @@
 use ipnetwork::IpNetwork;
 use mac_address::MacAddress;
-use pnet::datalink::{self, Channel::Ethernet, MacAddr, NetworkInterface};
+use pnet::datalink::{self, Channel::Ethernet, MacAddr};
 use pnet::packet::arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket};
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
 use pnet::packet::Packet;
 use pnet::util;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
-use std::str::FromStr;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -43,14 +42,7 @@ pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpA
     };
 
     let targets: Vec<Ipv4Addr> = match subnet {
-        IpNetwork::V4(v4) => v4
-            .iter()
-            .filter_map(|ip| match ip {
-                IpAddr::V4(v4) => Some(v4),
-                _ => None,
-            })
-            .take(1024)
-            .collect(),
+        IpNetwork::V4(v4) => v4.iter().take(1024).collect(),
         IpNetwork::V6(_) => Vec::new(),
     };
 
@@ -58,7 +50,7 @@ pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpA
         if *target_ip == src_ip {
             continue;
         }
-        send_arp_request(&mut tx, &src_mac, src_ip, *target_ip, interface)?;
+        send_arp_request(&mut tx, &src_mac, src_ip, *target_ip)?;
     }
 
     let mut results = HashMap::new();
@@ -78,11 +70,10 @@ pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpA
 }
 
 fn send_arp_request(
-    tx: &mut Box<dyn datalink::DataLinkSender + Send>,
+    tx: &mut Box<dyn datalink::DataLinkSender>,
     src_mac: &MacAddr,
     src_ip: Ipv4Addr,
     target_ip: Ipv4Addr,
-    interface: &NetworkInterface,
 ) -> Result<(), ArpError> {
     let mut ethernet_buffer = [0u8; 42];
     let mut arp_buffer = [0u8; 28];
@@ -110,7 +101,6 @@ fn send_arp_request(
         new_packet.copy_from_slice(ethernet_packet.packet());
     });
 
-    let _ = interface;
     Ok(())
 }
 
@@ -127,12 +117,7 @@ fn parse_arp_reply(packet: &[u8], our_ip: Ipv4Addr) -> Option<(Ipv4Addr, MacAddr
     if sender_ip == our_ip || sender_ip.is_unspecified() || sender_ip.is_broadcast() {
         return None;
     }
-    let hw = arp.get_sender_hw_addr().0;
-    let mac = MacAddress::from_bytes([hw[0], hw[1], hw[2], hw[3], hw[4], hw[5]]).ok()?;
+    let hw = arp.get_sender_hw_addr();
+    let mac = MacAddress::new([hw.0, hw.1, hw.2, hw.3, hw.4, hw.5]);
     Some((sender_ip, mac))
-}
-
-#[allow(dead_code)]
-fn mac_from_str(s: &str) -> Option<MacAddress> {
-    MacAddress::from_str(s).ok()
 }

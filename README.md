@@ -14,6 +14,16 @@ A Fing-like Rust agent for continuous LAN monitoring: device discovery, classifi
 - Periodic speed tests with time-series API for plotting
 - REST API on `127.0.0.1:8080` by default
 
+## System dependencies (Linux)
+
+```bash
+# Fedora
+sudo dnf install libpcap-devel openssl-devel
+
+# Debian/Ubuntu
+sudo apt install libpcap-dev libssl-dev
+```
+
 ## Quick start
 
 ```bash

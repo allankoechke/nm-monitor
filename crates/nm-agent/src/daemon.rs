@@ -8,9 +8,10 @@ use nm_core::notify::{
     network_restored_body, network_restored_title, NotificationPayload,
 };
 use nm_discovery::{
-    detect_network, LinkMonitor, LinkState, MdnsRegistry, NetworkContext, PassiveCapture,
-    PlatformBackend, PassiveObservation,
+    detect_network, DiscoveryBackend, LinkMonitor, LinkState, MdnsRegistry, NetworkContext,
+    PassiveCapture, PassiveObservation, PlatformBackend,
 };
+use nm_store::RegistryEvent;
 use nm_notify::NotificationDispatcher;
 use nm_speedtest::{SpeedTestContext, SpeedTestScheduler};
 use nm_store::{DeviceRegistry, Store};
@@ -75,8 +76,11 @@ pub async fn run_daemon(config_path: &Path, scan_once: bool) -> Result<(), Box<d
 
     if config.api.enabled {
         let router = build_router(api_state);
-        let bind = config.api.bind_addr.parse()?;
+        let bind_addr = config.api.bind_addr.clone();
         tokio::spawn(async move {
+            let bind: std::net::SocketAddr = bind_addr
+                .parse()
+                .expect("invalid api.bind_addr");
             let listener = tokio::net::TcpListener::bind(bind).await.unwrap();
             info!(%bind, "API server listening");
             axum::serve(listener, router).await.unwrap();
@@ -183,7 +187,7 @@ async fn run_scan_cycle(
     speedtest_scheduler: &Arc<SpeedTestScheduler>,
     interface: &str,
     link_last: &mut LinkState,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let link = link_monitor.status();
     let network_name = network_context.network_name();
 
@@ -217,22 +221,24 @@ async fn run_scan_cycle(
     for dev in &mut devices {
         if let Some(host) = &dev.hostname {
             let services = mdns_registry.services_for_host(host);
-            if !services.is_empty() && let Some(mut stored) = store.get_device(&dev.mac)? {
-                stored.mdns_services = services.clone();
-                let classification = DeviceClassifier::classify(&ClassificationInput {
-                    mac: dev.mac,
-                    vendor: dev.vendor.clone(),
-                    hostname: dev.hostname.clone(),
-                    open_ports: stored.open_ports.clone(),
-                    mdns_services: services,
-                    dhcp_hostname: None,
-                    is_gateway: snapshot.network.gateway == dev.ip,
-                });
-                stored.kind = classification.kind;
-                stored.os_hint = classification.os_hint;
-                stored.confidence = classification.confidence;
-                stored.inference_source = Some(classification.inference_source);
-                store.upsert_device(&stored)?;
+            if !services.is_empty() {
+                if let Some(mut stored) = store.get_device(&dev.mac)? {
+                    stored.mdns_services = services.clone();
+                    let classification = DeviceClassifier::classify(&ClassificationInput {
+                        mac: dev.mac,
+                        vendor: dev.vendor.clone(),
+                        hostname: dev.hostname.clone(),
+                        open_ports: stored.open_ports.clone(),
+                        mdns_services: services,
+                        dhcp_hostname: None,
+                        is_gateway: snapshot.network.gateway == dev.ip,
+                    });
+                    stored.kind = classification.kind;
+                    stored.os_hint = classification.os_hint;
+                    stored.confidence = classification.confidence;
+                    stored.inference_source = Some(classification.inference_source);
+                    store.upsert_device(&stored)?;
+                }
             }
         }
     }
@@ -291,11 +297,11 @@ async fn dispatch_registry_event(
     dispatcher: &NotificationDispatcher,
     network_context: &NetworkContext,
     registry: &DeviceRegistry,
-    evt: nm_store::RegistryEvent,
+    evt: RegistryEvent,
 ) {
     let network_name = network_context.network_name();
     match evt {
-        nm_store::RegistryEvent::DeviceJoined { device, identity_name } => {
+        RegistryEvent::DeviceJoined { device, identity_name } => {
             let name = device.display_name(identity_name.as_deref());
             let body = device_joined_body(
                 &name,
@@ -316,7 +322,7 @@ async fn dispatch_registry_event(
             };
             dispatcher.dispatch(&payload).await;
         }
-        nm_store::RegistryEvent::DeviceReturned { device, identity_name } => {
+        RegistryEvent::DeviceReturned { device, identity_name } => {
             let name = device.display_name(identity_name.as_deref());
             let body = device_joined_body(
                 &name,
@@ -337,7 +343,7 @@ async fn dispatch_registry_event(
             };
             dispatcher.dispatch(&payload).await;
         }
-        nm_store::RegistryEvent::DeviceLeft { device, identity_name } => {
+        RegistryEvent::DeviceLeft { device, identity_name } => {
             let name = device.display_name(identity_name.as_deref());
             let body = device_left_body(&name, &device.kind_label(), network_name.as_deref());
             let payload = NotificationPayload {
@@ -353,7 +359,7 @@ async fn dispatch_registry_event(
             };
             dispatcher.dispatch(&payload).await;
         }
-        nm_store::RegistryEvent::IpChanged { .. } => {}
+        RegistryEvent::IpChanged { .. } => {}
     }
 }
 

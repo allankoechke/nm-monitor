@@ -9,7 +9,6 @@ use nm_core::{
     speedtest::SpeedTestResult,
 };
 use rusqlite::{params, Connection, OptionalExtension};
-use std::net::IpAddr;
 use std::path::Path;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -369,7 +368,7 @@ fn parse_device_row(row: &rusqlite::Row<'_>) -> Result<Device, rusqlite::Error> 
     let ports: Vec<u16> = serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or_default();
     let services: Vec<String> = serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default();
     Ok(Device {
-        mac: MacAddress::from_str(&row.get::<_, String>(0)?).unwrap_or(MacAddress::nil()),
+        mac: MacAddress::from_str(&row.get::<_, String>(0)?).unwrap_or(MacAddress::new([0; 6])),
         current_ip: row
             .get::<_, Option<String>>(1)?
             .and_then(|s| s.parse().ok()),

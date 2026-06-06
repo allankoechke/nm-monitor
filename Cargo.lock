@@ -1390,6 +1390,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0aeb26bf5e836cc1c341c8106051b573f1766dfa05aa87f0b98be5e51b02303"
 dependencies = [
  "nix",
+ "serde",
  "winapi",
 ]
 
@@ -1569,6 +1570,7 @@ dependencies = [
 name = "nm-agent"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
  "clap",
  "futures",
@@ -1581,6 +1583,7 @@ dependencies = [
  "nm-store",
  "parking_lot",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1594,6 +1597,7 @@ dependencies = [
  "axum",
  "chrono",
  "futures",
+ "mac_address",
  "nm-core",
  "nm-discovery",
  "nm-speedtest",
@@ -1606,6 +1610,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1686,11 +1691,13 @@ dependencies = [
  "chrono",
  "futures",
  "nm-core",
+ "parking_lot",
  "reqwest",
  "serde",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2905,6 +2912,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

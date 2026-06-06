@@ -8,6 +8,7 @@ use tokio::time::interval;
 use tracing::{error, info};
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct SpeedTestContext {
     pub agent_name: String,
     pub network_name: Option<String>,

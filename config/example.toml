@@ -1,6 +1,5 @@
 [agent]
-# Defaulted from hostname on first run; override to disambiguate multiple agents
-name = "Home Pi"
+name = "Fedora WStation"
 
 [network]
 interface = "auto"
@@ -14,15 +13,14 @@ link_check_interval_secs = 30
 enabled = true
 interval_secs = 21600
 backend = "cloudflare"
-# server_url = "https://librespeed.example.com"
 min_interval_secs = 300
 
 [storage]
 database_path = "~/.local/share/network-monitor/network-monitor.db"
 
 [api]
-enabled = true
 bind_addr = "127.0.0.1:8080"
+enabled = true
 
 [notifications.ntfy]
 enabled = true
@@ -39,5 +37,3 @@ enabled = true
 
 [notifications.fcm]
 enabled = false
-# project_id = "my-project"
-# credentials_path = "/path/to/service-account.json"
