@@ -24,3 +24,4 @@ mac_address = { workspace = true }
 etherparse = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
+hostname = { workspace = true }

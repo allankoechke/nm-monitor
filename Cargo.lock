@@ -1646,6 +1646,7 @@ dependencies = [
  "dashmap",
  "etherparse",
  "futures",
+ "hostname",
  "ipnetwork 0.21.1",
  "mac_address",
  "mdns-sd",

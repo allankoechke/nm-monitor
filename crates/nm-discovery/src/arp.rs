@@ -7,8 +7,10 @@ use pnet::packet::Packet;
 use pnet::util;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
+use std::str::FromStr;
+use std::time::{Duration, Instant};
 use thiserror::Error;
+use tracing::{debug, warn};
 
 #[derive(Debug, Error)]
 pub enum ArpError {
@@ -16,7 +18,84 @@ pub enum ArpError {
     Failed(String),
 }
 
-pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpAddr, MacAddress>, ArpError> {
+pub fn subnet_host_ips(subnet: &IpNetwork, exclude: Option<Ipv4Addr>) -> Vec<Ipv4Addr> {
+    match subnet {
+        IpNetwork::V4(v4) => v4
+            .iter()
+            .filter(|ip| {
+                if ip.is_broadcast() || ip.is_unspecified() {
+                    return false;
+                }
+                if let Some(ex) = exclude {
+                    if *ip == ex {
+                        return false;
+                    }
+                }
+                // Skip network address (x.x.x.0)
+                if ip.octets()[3] == 0 {
+                    return false;
+                }
+                true
+            })
+            .collect(),
+        IpNetwork::V6(_) => Vec::new(),
+    }
+}
+
+/// Read the kernel ARP cache for devices on `interface` within `subnet`.
+pub fn read_proc_arp(
+    interface: &str,
+    subnet: &IpNetwork,
+) -> Result<HashMap<IpAddr, MacAddress>, ArpError> {
+    let content = std::fs::read_to_string("/proc/net/arp")
+        .map_err(|e| ArpError::Failed(format!("read /proc/net/arp: {e}")))?;
+    let mut results = HashMap::new();
+
+    for line in content.lines().skip(1) {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 6 {
+            continue;
+        }
+        let ip: Ipv4Addr = match parts[0].parse() {
+            Ok(ip) => ip,
+            Err(_) => continue,
+        };
+        let flags = match u32::from_str_radix(parts[2].trim_start_matches("0x"), 16) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        // ATF_COM — complete entry
+        if flags & 0x02 == 0 {
+            continue;
+        }
+        if parts[3] == "00:00:00:00:00:00" {
+            continue;
+        }
+        if parts[5] != interface {
+            continue;
+        }
+        let addr = IpAddr::V4(ip);
+        if !subnet.contains(addr) {
+            continue;
+        }
+        if let Ok(mac) = MacAddress::from_str(parts[3]) {
+            results.insert(addr, mac);
+        }
+    }
+
+    debug!(
+        interface,
+        count = results.len(),
+        "read /proc/net/arp"
+    );
+    Ok(results)
+}
+
+pub fn arp_sweep(
+    interface_name: &str,
+    subnet: &IpNetwork,
+    local_ip: Option<Ipv4Addr>,
+) -> Result<HashMap<IpAddr, MacAddress>, ArpError> {
     let interfaces = datalink::interfaces();
     let interface = interfaces
         .iter()
@@ -26,14 +105,21 @@ pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpA
     let src_mac = interface
         .mac
         .ok_or_else(|| ArpError::Failed("interface has no MAC".into()))?;
-    let src_ip = interface
-        .ips
-        .iter()
-        .find_map(|n| match n {
-            pnet::ipnetwork::IpNetwork::V4(v4) => Some(v4.ip()),
+    let src_ip = local_ip.or_else(|| {
+        interface.ips.iter().find_map(|n| match n {
+            pnet::ipnetwork::IpNetwork::V4(v4) => {
+                let ip = v4.ip();
+                if subnet.contains(IpAddr::V4(ip)) {
+                    Some(ip)
+                } else {
+                    None
+                }
+            }
             _ => None,
         })
-        .ok_or_else(|| ArpError::Failed("interface has no IPv4".into()))?;
+    }).ok_or_else(|| ArpError::Failed("interface has no IPv4 on subnet".into()))?;
+
+    let targets = subnet_host_ips(subnet, Some(src_ip));
 
     let (mut tx, mut rx) = match datalink::channel(interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
@@ -41,30 +127,55 @@ pub fn arp_sweep(interface_name: &str, subnet: &IpNetwork) -> Result<HashMap<IpA
         Err(e) => return Err(ArpError::Failed(e.to_string())),
     };
 
-    let targets: Vec<Ipv4Addr> = match subnet {
-        IpNetwork::V4(v4) => v4.iter().take(1024).collect(),
-        IpNetwork::V6(_) => Vec::new(),
-    };
+    let mut results = HashMap::new();
+    const BATCH: usize = 32;
+    const BATCH_WAIT_MS: u64 = 150;
+    const TOTAL_WAIT_SECS: u64 = 4;
 
-    for target_ip in &targets {
-        if *target_ip == src_ip {
-            continue;
+    let deadline = Instant::now() + Duration::from_secs(TOTAL_WAIT_SECS);
+
+    for chunk in targets.chunks(BATCH) {
+        for target_ip in chunk {
+            if let Err(e) = send_arp_request(&mut tx, &src_mac, src_ip, *target_ip) {
+                warn!(%target_ip, error = %e, "failed to send ARP request");
+            }
         }
-        send_arp_request(&mut tx, &src_mac, src_ip, *target_ip)?;
+
+        let batch_deadline = Instant::now() + Duration::from_millis(BATCH_WAIT_MS);
+        while Instant::now() < batch_deadline && Instant::now() < deadline {
+            match rx.next() {
+                Ok(packet) => {
+                    if let Some((ip, mac)) = parse_arp_packet(packet, src_ip) {
+                        results.insert(IpAddr::V4(ip), mac);
+                    }
+                }
+                Err(_) => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            }
+        }
     }
 
-    let mut results = HashMap::new();
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
-    while std::time::Instant::now() < deadline {
+    // Drain remaining replies until deadline
+    while Instant::now() < deadline {
         match rx.next() {
             Ok(packet) => {
-                if let Some((ip, mac)) = parse_arp_reply(packet, src_ip) {
+                if let Some((ip, mac)) = parse_arp_packet(packet, src_ip) {
                     results.insert(IpAddr::V4(ip), mac);
                 }
             }
-            Err(_) => break,
+            Err(_) => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
     }
+
+    debug!(
+        interface = interface_name,
+        targets = targets.len(),
+        replies = results.len(),
+        "ARP sweep finished"
+    );
 
     Ok(results)
 }
@@ -104,19 +215,28 @@ fn send_arp_request(
     Ok(())
 }
 
-fn parse_arp_reply(packet: &[u8], our_ip: Ipv4Addr) -> Option<(Ipv4Addr, MacAddress)> {
+fn parse_arp_packet(packet: &[u8], our_ip: Ipv4Addr) -> Option<(Ipv4Addr, MacAddress)> {
     let ethernet = EthernetPacket::new(packet)?;
     if ethernet.get_ethertype() != EtherTypes::Arp {
         return None;
     }
     let arp = ArpPacket::new(ethernet.payload())?;
-    if arp.get_operation() != ArpOperations::Reply {
-        return None;
-    }
     let sender_ip = arp.get_sender_proto_addr();
     if sender_ip == our_ip || sender_ip.is_unspecified() || sender_ip.is_broadcast() {
         return None;
     }
+
+    match arp.get_operation() {
+        ArpOperations::Reply => {}
+        ArpOperations::Request => {
+            // Gratuitous / peer ARP announcements on the LAN
+            if arp.get_target_proto_addr() != our_ip {
+                return None;
+            }
+        }
+        _ => return None,
+    }
+
     let hw = arp.get_sender_hw_addr();
     let mac = MacAddress::new([hw.0, hw.1, hw.2, hw.3, hw.4, hw.5]);
     Some((sender_ip, mac))

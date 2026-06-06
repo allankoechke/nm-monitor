@@ -5,6 +5,7 @@ use nm_core::config::{
     default_agent_name_from_hostname, default_config_path, expand_path, load_config, save_config,
     AppConfig,
 };
+use nm_core::device::{Device, DeviceSnapshot};
 use nm_core::event::EventKind;
 use nm_core::notify::{
     device_joined_body, device_left_body, network_down_body, network_down_title,
@@ -265,6 +266,8 @@ async fn run_scan_cycle(
         dispatch_registry_event(dispatcher, network_context, registry, evt).await;
     }
 
+    log_discovered_devices(&devices, store, snapshot.network.gateway, mdns_registry)?;
+
     let device_count = devices.len();
     let _ = event_tx.send(serde_json::json!({
         "kind": "scan_completed",
@@ -273,6 +276,93 @@ async fn run_scan_cycle(
     }).to_string());
 
     Ok(device_count)
+}
+
+fn log_discovered_devices(
+    snapshots: &[DeviceSnapshot],
+    store: &Store,
+    gateway: Option<std::net::IpAddr>,
+    mdns_registry: &MdnsRegistry,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for snap in snapshots {
+        let stored = store.get_device(&snap.mac)?;
+        let mdns_services = snap
+            .hostname
+            .as_ref()
+            .map(|host| mdns_registry.services_for_host(host))
+            .unwrap_or_default();
+
+        let (kind, os_hint) = if let Some(ref device) = stored {
+            (device.kind, device.os_hint)
+        } else {
+            let classification = DeviceClassifier::classify(&ClassificationInput {
+                mac: snap.mac,
+                vendor: snap.vendor.clone(),
+                hostname: snap.hostname.clone(),
+                open_ports: Vec::new(),
+                mdns_services,
+                dhcp_hostname: None,
+                is_gateway: gateway == snap.ip,
+            });
+            (classification.kind, classification.os_hint)
+        };
+
+        let identity_name = stored
+            .as_ref()
+            .and_then(|d| d.identity_id)
+            .and_then(|id| store.get_identity(&id).ok().flatten())
+            .map(|i| i.display_name);
+
+        let name = stored
+            .as_ref()
+            .map(|d| d.display_name(identity_name.as_deref()))
+            .unwrap_or_else(|| snapshot_display_name(snap));
+
+        let device_type = Device {
+            mac: snap.mac,
+            current_ip: snap.ip,
+            hostname: snap.hostname.clone(),
+            vendor: snap.vendor.clone(),
+            kind,
+            os_hint,
+            identity_id: None,
+            user_label: None,
+            first_seen: Utc::now(),
+            last_seen: Utc::now(),
+            online: true,
+            open_ports: Vec::new(),
+            mdns_services: Vec::new(),
+            confidence: 0.0,
+            inference_source: None,
+            do_not_scan: false,
+        }
+        .kind_label();
+
+        let ip = snap
+            .ip
+            .or_else(|| stored.as_ref().and_then(|d| d.current_ip))
+            .map(|addr| addr.to_string())
+            .unwrap_or_else(|| "unknown".into());
+
+        info!(
+            name = %name,
+            device_type = %device_type,
+            ip = %ip,
+            mac = %snap.mac,
+            "discovered device"
+        );
+    }
+    Ok(())
+}
+
+fn snapshot_display_name(snap: &DeviceSnapshot) -> String {
+    if let Some(host) = &snap.hostname {
+        return host.clone();
+    }
+    if let Some(vendor) = &snap.vendor {
+        return format!("{vendor} device");
+    }
+    snap.mac.to_string()
 }
 
 async fn handle_link_change(
