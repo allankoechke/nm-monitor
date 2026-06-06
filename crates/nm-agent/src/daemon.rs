@@ -125,7 +125,8 @@ pub async fn run_daemon(config_path: &Path, scan_once: bool) -> Result<(), Box<d
     info!(agent = %agent_name, interface = %interface, "nm-agent started");
 
     if scan_once {
-        run_scan_cycle(
+        info!(interface = %interface, agent = %agent_name, "scan-once: starting network scan");
+        let device_count = run_scan_cycle(
             &backend,
             &mut registry,
             &dispatcher,
@@ -139,6 +140,12 @@ pub async fn run_daemon(config_path: &Path, scan_once: bool) -> Result<(), Box<d
             &mut link_last,
         )
         .await?;
+        info!(
+            interface = %interface,
+            agent = %agent_name,
+            device_count,
+            "scan-once: scan completed"
+        );
         return Ok(());
     }
 
@@ -157,7 +164,9 @@ pub async fn run_daemon(config_path: &Path, scan_once: bool) -> Result<(), Box<d
                     &speedtest_scheduler,
                     &interface,
                     &mut link_last,
-                ).await {
+                )
+                .await
+                {
                     error!(error = %e, "scan cycle failed");
                 }
                 let _ = registry.mark_stale_offline(
@@ -195,7 +204,7 @@ async fn run_scan_cycle(
     speedtest_scheduler: &Arc<SpeedTestScheduler>,
     interface: &str,
     link_last: &mut LinkState,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<usize, Box<dyn std::error::Error>> {
     let link = link_monitor.status();
     let network_name = network_context.network_name();
 
@@ -219,7 +228,7 @@ async fn run_scan_cycle(
     *link_last = link.state;
 
     if link.state == LinkState::Down {
-        return Ok(());
+        return Ok(0);
     }
 
     let snapshot = backend.discover().await?;
@@ -256,13 +265,14 @@ async fn run_scan_cycle(
         dispatch_registry_event(dispatcher, network_context, registry, evt).await;
     }
 
+    let device_count = devices.len();
     let _ = event_tx.send(serde_json::json!({
         "kind": "scan_completed",
-        "device_count": devices.len(),
+        "device_count": device_count,
         "timestamp": Utc::now(),
     }).to_string());
 
-    Ok(())
+    Ok(device_count)
 }
 
 async fn handle_link_change(
